@@ -35,14 +35,14 @@ MODEL_NAMES = ["alexnet", "resnet", "vgg"]
 # OTHER PARAMETERS
 NUM_CLASSES = 2  # Binary Classification
 NUM_WORKERS = 0
-PIN_MEMORY = True
+PIN_MEMORY = False
 
 # Batch size for training (change depending on how much memory you have)
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 
 # Early stopping
 NUM_EPOCHS = 500  # Number of epochs to train for
-PATIENCE_ES = 25  # Patience for early stopping
+PATIENCE_ES = 10  # Patience for early stopping
 DELTA_ES = 0.0001  # Delta for early stopping
 
 # Flag for feature extracting. When False, we finetune the whole model,
@@ -280,7 +280,7 @@ def evaluateModelsOnDataset(datasetFolder, datasetInfo):
 
     setSeed()
     testDataLoader = DataLoader(
-        testDataset, batch_size=64, shuffle=True, num_workers=0, pin_memory=True)
+        testDataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=PIN_MEMORY)
 
     # Evaluate every model
     for root, _, fnames in sorted(os.walk(MODELS_DIR, followlinks=True)):
@@ -327,12 +327,18 @@ def evaluateModelsOnDataset(datasetFolder, datasetInfo):
     return modelsEvals
 
 
+
 ### ITERATING MODELS AND BALANCES ###
 setSeed()
 
+torch.cuda.empty_cache()
+
 for dataset_dir in sorted(getSubDirs(DATASETS_DIR)):
+    torch.cuda.empty_cache()
     for model_name in sorted(MODEL_NAMES):
+        torch.cuda.empty_cache()
         for balance in sorted(BALANCES):
+            torch.cuda.empty_cache()
             print(
                 f'\n\n[🤖 MODEL] {dataset_dir} - {model_name} - {balance}\n\n')
 
@@ -441,208 +447,7 @@ for dataset_dir in sorted(getSubDirs(DATASETS_DIR)):
 
             print("[💾 SAVED]", dataset_dir, model_name,
                   "/".join(str(b) for b in balance))
-
-
-### GENERATING PREDICTIONS ###
-print("\n\n" + "-" * 50)
-print("\n[🧠 GENERATING MODEL PREDICTIONS]")
-
-predictions = []
-
-for dataset in sorted(getSubDirs(DATASETS_DIR)):
-    print("\n" + "-" * 15)
-    print("[🗃️ DATASET] {}\n".format(dataset))
-
-    datasetDir = os.path.join(DATASETS_DIR, dataset)
-    testDir = os.path.join(datasetDir, "test")
-
-    toTensor = transforms.Compose([
-        transforms.Resize(INPUT_SIZE),
-        transforms.ToTensor(),
-        transforms.Normalize(NORMALIZATION_PARAMS[0], NORMALIZATION_PARAMS[1])
-    ])
-
-    testDataset = BalancedDataset(
-        testDir, transform=toTensor, use_cache=False, check_images=False)
-
-    testDataLoader = DataLoader(testDataset, batch_size=16, shuffle=False)
-
-    for root, _, fnames in sorted(os.walk(MODELS_DIR)):
-        for fname in sorted(fnames):
-            path = os.path.join(root, fname)
-
-            modelData = torch.load(path)
-
-            modelDataset = modelData["dataset"]
-            modelName = modelData["model_name"]
-
-            modelBalance = "/".join(str(x) for x in modelData["balance"])
-
-            print("[🎖️ EVALUATING]", modelData["model_name"], modelBalance)
-
-            modelToTest = modelData["model"]
-            modelToTest = modelToTest.to(DEVICE, non_blocking=True)
-
-            outputs = evaluateModel(modelToTest, testDataLoader)
-
-            for (image, label), output in zip(testDataset.imgs, outputs):
-                predictions.append(
-                    {
-                        "task": currentTask,
-                        "model": modelData["model_name"],
-                        "model_dataset": modelData["dataset"],
-                        "balance": modelBalance,
-                        "dataset": dataset,
-                        "image": Path(image),
-                        "name": Path(image).name,
-                        "label": label,
-                        "prediction": int(output.cpu().numpy())
-                    }
-                )
-
-predictionsDF = pd.DataFrame(predictions)
-
-if not os.path.exists(os.path.dirname('/'.join(MODEL_PREDICTIONS_PATH.split('.csv')[0].split('/')[:-1])+'/')):
-    os.makedirs(os.path.dirname('/'.join(MODEL_PREDICTIONS_PATH.split('.csv')[0].split('/')[:-1])+'/'))
-
-predictionsDF.to_csv(MODEL_PREDICTIONS_PATH)
-
-
-print("\n\n" + "-" * 50)
-print("\n[🧠 MODELS EVALUATION - BASELINE]")
-
-modelsEvals = []
-
-# Evaluate models on test folders
-for dataset in sorted(getSubDirs(DATASETS_DIR)):
-    print("\n" + "-" * 15)
-    print("[🗃️ TEST DATASET] {}".format(dataset))
-
-    datasetDir = os.path.join(DATASETS_DIR, dataset)
-    testDir = os.path.join(datasetDir, "test")
-
-    advDatasetInfo = {
-        "dataset": dataset,
-        "math": None,
-        "attack": None,
-        "balancing": None,
-        "model": None,
-    }
-
-    evals = evaluateModelsOnDataset(testDir, advDatasetInfo)
-    modelsEvals.extend(evals)
-
-modelsEvalsDF = pd.DataFrame(modelsEvals)
-
-if not os.path.exists(os.path.dirname('/'.join(BASELINE_PATH.split('.csv')[0].split('/')[:-1])+'/')):
-    os.makedirs(os.path.dirname('/'.join(BASELINE_PATH.split('.csv')[0].split('/')[:-1])+'/'))
-
-modelsEvalsDF.to_csv(BASELINE_PATH)
-
-
-### COMPUTING CLASS SIMILARITY ###
-print("\n\n" + "-" * 50)
-print("\n[🧠 MODELS EVALUATION - CLASS SIMILARITY]")
-
-# Defining clean pre-trained models (not finetuned)
-alexnet = models.alexnet(pretrained=True)
-resnet = models.resnet18(pretrained=True)
-vgg = models.vgg11_bn(pretrained=True)
-
-models = [alexnet, resnet, vgg]
-
-similarities = []
-
-for model, name in zip(models, MODEL_NAMES):
-    for dataset in ['bing', 'google']:
-
-        print(f'\n[🧮 EVALUATING] {name} - {dataset}')
-
-        # Loading test set
-        datasetDir = os.path.join(DATASETS_DIR, dataset)
-        testDir = os.path.join(datasetDir, "test")
-
-        toTensor = transforms.Compose([
-            transforms.Resize(INPUT_SIZE),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                NORMALIZATION_PARAMS[0], NORMALIZATION_PARAMS[1])
-        ])
-
-        testDataset = BalancedDataset(
-            testDir, transform=toTensor, use_cache=False, check_images=False)
-
-        setSeed()
-        testDataLoader = DataLoader(
-            testDataset, batch_size=16, shuffle=False)
-
-        model = model.to(DEVICE, non_blocking=True)
-
-        layer = model._modules.get('avgpool')
-
-        def copy_embeddings(m, i, o):
-            """
-            Copy embeddings from the avgpool layer.
-            """
-            o = o[:, :, 0, 0].detach().cpu().numpy().tolist()
-            outputs.append(o)
-
-        outputs = []
-
-        # Attach hook to avgpool layer
-        _ = layer.register_forward_hook(copy_embeddings)
-
-        model.eval()
-
-        for X, y in testDataLoader:
-            X = X.to(DEVICE, non_blocking=True)
-            _ = model(X)
-
-        list_embeddings = [item for sublist in outputs for item in sublist]
-        embedding_size = len(list_embeddings[0])
-
-        embeddings_0 = list_embeddings[:len(list_embeddings)//2]
-        embeddings_1 = list_embeddings[len(list_embeddings)//2:]
-
-        inter = []
-        intra0 = []
-        intra1 = []
-
-        print(f'\t[⛏️ INTER] ', end='')
-        for e0 in embeddings_0:
-            for e1 in embeddings_1:
-                dist = np.linalg.norm(np.array(e0) - np.array(e1))
-                inter.append(dist)
-        inter_dist = round(np.mean(inter)/embedding_size, 3)
-        print(inter_dist)
-
-        print(f'\t[⛏️ INTRA #0] ', end='')
-        for i, e0_0 in enumerate(embeddings_0):
-            for j, e0_1 in enumerate(embeddings_0):
-                if i != j:
-                    dist = np.linalg.norm(np.array(e0_0) - np.array(e0_1))
-                    intra0.append(dist)
-        intra0_dist = round(np.mean(intra0)/embedding_size, 3)
-        print(intra0_dist)
-
-        print(f'\t[⛏️ INTRA #1] ', end='')
-        for i, e1_0 in enumerate(embeddings_1):
-            for j, e1_1 in enumerate(embeddings_1):
-                if i != j:
-                    dist = np.linalg.norm(np.array(e1_0) - np.array(e1_1))
-                    intra1.append(dist)
-        intra1_dist = round(np.mean(intra1)/embedding_size, 3)
-        print(intra1_dist)
-
-        similarities.append({
-            'dataset': dataset,
-            'model': name,
-            'inter': inter_dist,
-            'intra0': intra0_dist,
-            'intra1': intra1_dist
-        })
-
-df = pd.DataFrame(similarities)
-if not os.path.exists(os.path.dirname('/'.join(SIMILARITY_PATH.split('.csv')[0].split('/')[:-1])+'/')):
-    os.makedirs(os.path.dirname('/'.join(SIMILARITY_PATH.split('.csv')[0].split('/')[:-1])+'/'))
-df.to_csv(SIMILARITY_PATH)
+            
+            # Free memory explicitly
+            del model_ft, optimizer_ft, dataloaders_dict, image_datasets
+            torch.cuda.empty_cache()

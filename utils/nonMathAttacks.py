@@ -27,7 +27,7 @@ class NonMathAttacks():
 
         # Noise
         atkImage = random_noise(
-            image_array, mode='gaussian', seed=self.currentSeed, mean=amount, var=amount)
+            image_array, mode='gaussian', rng=self.currentSeed, mean=amount, var=amount)
         atkImage = (255 * atkImage).astype(np.uint8)
 
         return Image.fromarray(atkImage)

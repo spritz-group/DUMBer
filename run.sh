@@ -1,7 +1,7 @@
 #!/bin/sh
 
 tasks="0 1 2"
-scripts="modelTrainer.py attackGeneration.py evaluation.py"
+scripts="modelTrainer.py attackGenerationVal.py adversarialTraining.py attackGenerationTest.py evaluation.py"
 
 for tsk in $tasks; do
   export TASK=$tsk

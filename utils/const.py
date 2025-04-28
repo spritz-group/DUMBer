@@ -15,13 +15,18 @@ SEED = 151836
 ADVERSARIAL_DIR = f"./adversarialSamples/{currentTask}"
 DATASETS_DIR = f"./datasets/{currentTask}"
 MODELS_DIR = f"./models/{currentTask}"
+ADV_MODELS_DIR = f"./adv_models/{currentTask}"
+
 HISTORY_DIR = f"./results/attacks/history/{currentTask}"
 EVALUATIONS_DIR = f"./results/attacks/evaluation/{currentTask}"
+ADV_EVALUATIONS_DIR = f"./results/attacks/adv_evaluation/{currentTask}"
 
 # Dataframes
 
 MODEL_PREDICTIONS_PATH = f"./results/models/predictions/predictions_{currentTask}.csv"
+ADV_MODEL_PREDICTIONS_PATH = f"./results/models/predictions/adv_predictions_{currentTask}.csv"
 BASELINE_PATH = f"./results/models/baseline/baseline_{currentTask}.csv"
+ADV_BASELINE_PATH = f"./results/models/baseline/adv_baseline_{currentTask}.csv"
 SIMILARITY_PATH = f"./results/models/similarity/similarity_{currentTask}.csv"
 
 # Models
